@@ -60,21 +60,17 @@ A lightweight, fast, and modern SMS messaging app built with **React Native**. B
 
 
 ## ✍️ Author
- 
- # Harsh Jaiswal
+ ### Harsh Jaiswal
 
 
 ## 🤝 Contributing
-
 Pull requests are welcome. For major changes, open an issue first to discuss what you’d like to change.
 
 
 ## 📄 License
-
 This project is licensed under the MIT License.
 
 
 ❤️ Support
-
 If you like this project, consider giving it a ⭐️ on GitHub!
 
