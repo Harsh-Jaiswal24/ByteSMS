@@ -25,14 +25,14 @@ A lightweight, fast, and modern SMS messaging app built with **React Native**. B
 
 ## 🛠️ Installation
 
-```bash
+
 git clone https://github.com/Harsh-Jaiswal24/ByteSMS.git
 cd ByteSMS
 npm install
 npx react-native run-android
 Ensure your Android device/emulator is running.
 
-📦 Dependencies
+## 📦 Dependencies
 react-native-image-picker
 
 react-native-fs
@@ -43,7 +43,8 @@ lz-string + custom Huffman compression
 
 react-navigation, @react-native-community/netinfo, etc.
 
-🔐 Permissions Required
+## 🔐 Permissions Required
+
 READ_SMS
 
 SEND_SMS
@@ -56,7 +57,7 @@ READ_EXTERNAL_STORAGE
 
 CAMERA
 
-📚 Project Structure
+## 📚 Project Structure
 bash
 Copy
 Edit
@@ -70,14 +71,15 @@ ByteSMS/
 ├── assets/
 ├── App.js
 └── ...
-✍️ Author
+
+## ✍️ Author
 Harsh Jaiswal
 GitHub
 
-🤝 Contributing
+## 🤝 Contributing
 Pull requests are welcome. For major changes, open an issue first to discuss what you’d like to change.
 
-📄 License
+## 📄 License
 This project is licensed under the MIT License.
 
 ❤️ Support
@@ -89,8 +91,3 @@ Edit
 
 ---
 
-Let me know if you want:
-- badges (build status, license, version)
-- GIF demo preview
-- link to a video walkthrough  
-I can add that too!
