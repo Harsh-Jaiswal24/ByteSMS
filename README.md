@@ -57,30 +57,20 @@ READ_EXTERNAL_STORAGE
 
 CAMERA
 
-## 📚 Project Structure
-bash
-Copy
-Edit
-ByteSMS/
-├── components/
-│   ├── ThreadView.jsx          # Chat screen
-│   ├── AllConversations.jsx    # Home screen
-│   └── ImageViewer.jsx         # Full-screen image viewer
-├── utils/
-│   └── smsImageUtils.js        # Image compression/decompression
-├── assets/
-├── App.js
-└── ...
+
 
 ## ✍️ Author
 Harsh Jaiswal
 GitHub
 
+
 ## 🤝 Contributing
 Pull requests are welcome. For major changes, open an issue first to discuss what you’d like to change.
 
+
 ## 📄 License
 This project is licensed under the MIT License.
+
 
 ❤️ Support
 If you like this project, consider giving it a ⭐️ on GitHub!
