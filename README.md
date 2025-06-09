@@ -1,6 +1,6 @@
 # 📩 ByteSMS
 
-A lightweight, fast, and modern SMS messaging app built with **React Native**. ByteSMS allows users to send and receive both text and image messages via traditional SMS with enhanced UI and smart features.
+A lightweight, fast, and modern SMS messaging app built with **React Native**. ByteSMS **allows users to send and receive both text and image** messages via traditional SMS **fully offline** with enhanced UI and smart features.
 
 ---
 
