@@ -1,0 +1,233 @@
+import ImageResizer from '@bam.tech/react-native-image-resizer';
+import { compressToEncodedURIComponent, decompressFromEncodedURIComponent } from 'lz-string';
+
+const MAX_IMAGE_WIDTH = 400;
+const MAX_IMAGE_HEIGHT = 400;
+const IMAGE_QUALITY = 60;
+const IMAGE_PREFIX = 'IMG:';
+
+// --- OPTIMIZED HUFFMAN CODING UTILITIES ---
+
+class HuffmanNode {
+  constructor(char, freq, left = null, right = null) {
+    this.char = char;
+    this.freq = freq;
+    this.left = left;
+    this.right = right;
+  }
+}
+
+const buildHuffmanTree = (text) => {
+  const freqMap = {};
+  for (let char of text) {
+    freqMap[char] = (freqMap[char] || 0) + 1;
+  }
+
+  const pq = Object.entries(freqMap).map(([char, freq]) => new HuffmanNode(char, freq));
+  pq.sort((a, b) => a.freq - b.freq);
+
+  while (pq.length > 1) {
+    const left = pq.shift();
+    const right = pq.shift();
+    const newNode = new HuffmanNode(null, left.freq + right.freq, left, right);
+    pq.push(newNode);
+    pq.sort((a, b) => a.freq - b.freq);
+  }
+
+  return pq[0];
+};
+
+const generateHuffmanCodes = (node, prefix = '', map = {}) => {
+  if (!node) return map;
+  if (!node.left && !node.right) {
+    map[node.char] = prefix;
+  }
+  generateHuffmanCodes(node.left, prefix + '0', map);
+  generateHuffmanCodes(node.right, prefix + '1', map);
+  return map;
+};
+
+// --- Huffman Tree Serialization with Key Minimization ---
+
+const serializeTree = (node) => {
+  if (!node) return 'n';
+  return {
+    c: node.char ?? 'n',  // 'char' → 'c', 'null' → 'n'
+    f: node.freq,         // 'freq' → 'f'
+    l: serializeTree(node.left),  // 'left' → 'l'
+    r: serializeTree(node.right), // 'right' → 'r'
+  };
+};
+
+const deserializeTree = (data) => {
+  if (data === 'n') return null;
+  const node = new HuffmanNode(data.c === 'n' ? null : data.c, data.f);
+  node.left = deserializeTree(data.l);
+  node.right = deserializeTree(data.r);
+  return node;
+};
+
+// --- Encode and Decode ---
+
+const huffmanEncode = (text) => {
+  const root = buildHuffmanTree(text);
+  const codes = generateHuffmanCodes(root);
+  let encoded = '';
+  for (let char of text) {
+    encoded += codes[char];
+  }
+
+  const treeJson = JSON.stringify(serializeTree(root));
+  return { encoded, tree: treeJson };
+};
+
+const huffmanDecode = (encoded, treeJson) => {
+  const treeData = JSON.parse(treeJson);
+  const tree = deserializeTree(treeData);
+  let result = '';
+  let node = tree;
+  for (let bit of encoded) {
+    node = bit === '0' ? node.left : node.right;
+    if (!node.left && !node.right) {
+      result += node.char;
+      node = tree;
+    }
+  }
+  return result;
+};
+
+// --- IMAGE COMPRESSION FOR SMS ---
+
+export const compressImageForSMS = async (imageUri) => {
+  try {
+    const resized = await ImageResizer.createResizedImage(
+      imageUri,
+      MAX_IMAGE_WIDTH,
+      MAX_IMAGE_HEIGHT,
+      'WEBP',
+      IMAGE_QUALITY,
+      0,
+      undefined,
+      false
+    );
+
+    let base64 = resized.uri;
+    if (base64.startsWith('data:')) {
+      base64 = base64.split(',')[1];
+    }
+
+    if (!base64) throw new Error('Failed to get image data');
+
+    const lzCompressed = compressToEncodedURIComponent(base64);
+    const { encoded: huffmanEncoded, tree } = huffmanEncode(lzCompressed);
+
+    const finalPayload = `${IMAGE_PREFIX}${tree}|||${huffmanEncoded}`;
+    console.log('[DEBUG] Final Payload:', finalPayload);
+    return finalPayload;
+  } catch (error) {
+    console.error('Image compression failed:', error);
+    throw new Error(`Failed to compress image: ${error.message}`);
+  }
+};
+
+// --- CHECK FOR IMAGE MESSAGE ---
+
+export const isCompressedImage = (message) => {
+  return message?.startsWith(IMAGE_PREFIX);
+};
+
+// --- DECOMPRESSION FOR DISPLAY ---
+
+
+
+const imageCache = new Map();
+export const decompressImageForDisplay = (compressedMessage) => {
+   if (imageCache.has(compressedMessage)) {
+    return imageCache.get(compressedMessage);
+  }
+  try {
+    if (!isCompressedImage(compressedMessage)) {
+      return null;
+    }
+
+    // Extract Huffman tree and encoded data
+    const payload = compressedMessage.substring(4); // Remove "IMG:" prefix
+    const [treeJson, huffmanEncoded] = payload.split('|||');
+    
+    if (!treeJson || !huffmanEncoded) {
+      console.error('Invalid compressed image format');
+      return null;
+    }
+
+    // Deserialize Huffman tree
+    const treeData = JSON.parse(treeJson);
+    const huffmanTree = deserializeTree(treeData);
+
+    // Decode Huffman encoding
+    let decodedLZ = '';
+    let currentNode = huffmanTree;
+    
+    for (let bit of huffmanEncoded) {
+      currentNode = bit === '0' ? currentNode.left : currentNode.right;
+      
+      if (!currentNode.left && !currentNode.right) {
+        decodedLZ += currentNode.char;
+        currentNode = huffmanTree;
+      }
+    }
+
+    // Decompress LZ-String
+    const base64 = decompressFromEncodedURIComponent(decodedLZ);
+    
+    if (!base64) {
+      console.error('LZ decompression failed');
+      return null;
+    }
+
+    // Return as data URI for image display
+     const uri = `data:image/webp;base64,${base64}`;
+  imageCache.set(compressedMessage, uri);
+  return uri;
+  } catch (error) {
+    console.error('Image decompression failed:', error);
+    return null;
+  }
+};
+
+
+
+
+
+
+
+
+
+
+
+
+// export const decompressImageForDisplay = (compressedStr) => {
+//   if (!isCompressedImage(compressedStr)) return null;
+
+//   try {
+//     const rawData = compressedStr.replace(IMAGE_PREFIX, '');
+//     const [treeJson, encodedData] = rawData.split('|||');
+
+//     const lzCompressed = huffmanDecode(encodedData, treeJson);
+//     const base64 = decompressFromEncodedURIComponent(lzCompressed);
+
+//     if (!base64) {
+//       console.warn('Failed to decompress image data');
+//       return null;
+//     }
+
+//     return base64; // this is a base64 string (not prefixed), use it like: `data:image/webp;base64,${base64}`
+//   } catch (error) {
+//     console.error('Image decompression failed:', error);
+//     return null;
+//   }
+// };
+
+
+
+
+///////stage 2 donee

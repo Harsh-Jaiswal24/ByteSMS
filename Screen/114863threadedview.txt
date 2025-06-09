@@ -1,0 +1,474 @@
+import React, { useState, useEffect } from 'react';
+import {
+  View,
+  Text,
+  FlatList,
+  StyleSheet,
+  TextInput,
+  TouchableOpacity,
+  KeyboardAvoidingView,
+  Platform,
+  ActivityIndicator,
+  Alert,
+  Image,
+  Modal,
+  Pressable,
+} from 'react-native';
+import { NativeModules } from 'react-native';
+import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
+import Icon from 'react-native-vector-icons/FontAwesome6';
+import { check, request, PERMISSIONS, RESULTS } from 'react-native-permissions';
+import RNFS from 'react-native-fs';
+
+import {
+  compressImageForSMS,
+  isCompressedImage,
+  decompressImageForDisplay,
+} from '../Utils/smsImageUtils';
+
+const { DirectMessagingModule } = NativeModules;
+
+const ThreadView = ({ route, navigation }) => {
+  const { address,item } = route.params;
+  const [messages, setMessages] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [newMessage, setNewMessage] = useState('');
+  const [sending, setSending] = useState(false);
+  const [fullImageUri, setFullImageUri] = useState(null);
+
+  useEffect(() => {
+    navigation.setOptions({ title: address });
+ // Run immediately
+  loadMessages();
+ console.log("Threadview component rerender and loadmessage func called")
+  // Then every 5 seconds
+  const intervalId = setInterval(() => {
+    loadMessages();
+     console.log("Threadview component rerender and loadmessage func called")
+  }, 5000);
+
+  
+  return () => clearInterval(intervalId);
+   
+  }, [address]);
+
+  const loadMessages = async () => {
+    setLoading(true);
+    try {
+      const msgs = await DirectMessagingModule.getMessagesForThread(address);
+      const formattedMsgs = msgs.map(msg => ({
+        ...msg,
+        type: msg.type || (msg.address === address ? 2 : 1),
+      }));
+      setMessages(formattedMsgs);
+    } catch (error) {
+      console.error('Failed to load messages:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const sendMessage = async () => {
+    if (!newMessage.trim()) return;
+    setSending(true);
+    const tempId = Date.now().toString();
+
+    const newMsg = {
+      id: tempId,
+      body: newMessage,
+      timestamp: Date.now(),
+      type: 2,
+      address: address,
+    };
+
+    setMessages(prev => [newMsg, ...prev]);
+    setNewMessage('');
+
+    try {
+      await DirectMessagingModule.sendDirectSms(address, newMessage);
+      await loadMessages();
+    } catch (error) {
+      console.error('For your device need manual permission due to its sequrity policies', error);
+      setMessages(prev => prev.filter(msg => msg.id !== tempId));
+      Alert.alert('Mannual SMS Permission Required', 'For your device need manual sms permission due to its sequrity policies');
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const requestCameraPermission = async () => {
+    if (Platform.OS === 'android') {
+      const result = await check(PERMISSIONS.ANDROID.CAMERA);
+      if (result === RESULTS.GRANTED) return true;
+
+      const granted = await request(PERMISSIONS.ANDROID.CAMERA);
+      return granted === RESULTS.GRANTED;
+    }
+    return true;
+  };
+
+  const requestStoragePermission = async () => {
+    if (Platform.OS === 'android') {
+      if (Platform.Version >= 30) {
+        // Android 11+: Use scoped storage, no permission needed for app-specific directory
+        return true;
+      } else if (Platform.Version >= 29) {
+        const result = await check(PERMISSIONS.ANDROID.READ_EXTERNAL_STORAGE);
+        if (result === RESULTS.GRANTED) return true;
+
+        const granted = await request(PERMISSIONS.ANDROID.READ_EXTERNAL_STORAGE);
+        return granted === RESULTS.GRANTED;
+      } else {
+        const result = await check(PERMISSIONS.ANDROID.WRITE_EXTERNAL_STORAGE);
+        if (result === RESULTS.GRANTED) return true;
+
+        const granted = await request(PERMISSIONS.ANDROID.WRITE_EXTERNAL_STORAGE);
+        return granted === RESULTS.GRANTED;
+      }
+    }
+    return true;
+  };
+
+  const handleImagePick = () => {
+    Alert.alert('Select Image Source', '', [
+      {
+        text: 'Camera',
+        onPress: async () => {
+          try {
+            const hasPermission = await requestCameraPermission();
+            if (!hasPermission) {
+              Alert.alert('Permission required', 'Camera permission denied');
+              return;
+            }
+
+            launchCamera(
+              {
+                mediaType: 'photo',
+                includeBase64: false,
+                quality: 0.7,
+                saveToPhotos: false,
+                cameraType: 'back',
+              },
+              async response => {
+                if (response.didCancel) return;
+                if (response.errorCode) {
+                  Alert.alert('Camera Error', response.errorMessage || 'Unknown error');
+                  return;
+                }
+
+                if (response.assets?.[0]?.uri) {
+                  try {
+                    const compressed = await compressImageForSMS(response.assets[0].uri);
+                    setNewMessage(compressed);
+                  } catch (error) {
+                    Alert.alert('Error', 'Failed to compress image');
+                  }
+                }
+              }
+            );
+          } catch (error) {
+            Alert.alert('Error', 'Failed to access camera');
+          }
+        },
+      },
+      {
+        text: 'Gallery',
+        onPress: async () => {
+          try {
+            if (Platform.OS === 'android' && Platform.Version < 29) {
+              const hasPermission = await requestStoragePermission();
+              if (!hasPermission) {
+                Alert.alert('Permission required', 'Storage permission denied');
+                return;
+              }
+            }
+
+            launchImageLibrary(
+              {
+                mediaType: 'photo',
+                includeBase64: false,
+                quality: 0.7,
+                selectionLimit: 1,
+              },
+              async response => {
+                if (response.didCancel) return;
+                if (response.errorCode) {
+                  Alert.alert('Gallery Error', response.errorMessage || 'Unknown error');
+                  return;
+                }
+
+                if (response.assets?.[0]?.uri) {
+                  try {
+                    const compressed = await compressImageForSMS(response.assets[0].uri);
+                    setNewMessage(compressed);
+                  } catch (error) {
+                    Alert.alert('Error', 'Failed to compress image');
+                  }
+                }
+              }
+            );
+          } catch (error) {
+            Alert.alert('Error', 'Failed to access gallery');
+          }
+        },
+      },
+      {
+        text: 'Cancel',
+        style: 'cancel',
+      },
+    ]);
+  };
+
+  const downloadImage = async (imageUri) => {
+    if (!imageUri) return;
+
+    try {
+      // Request storage permission for Android < 11
+      if (Platform.OS === 'android' && Platform.Version < 30) {
+        const hasPermission = await requestStoragePermission();
+        if (!hasPermission) {
+          Alert.alert('Permission required', 'Storage permission denied');
+          return;
+        }
+      }
+
+      // Define the destination path
+      const fileName = `image_${Date.now()}.jpg`;
+      let destPath;
+      if (Platform.OS === 'android' && Platform.Version >= 30) {
+        // Android 11+: Use app-specific storage (scoped storage)
+        destPath = `${RNFS.PicturesDirectoryPath}/${fileName}`;
+      } else {
+        // Android < 11 or iOS: Use public Pictures directory
+        destPath = `${RNFS.PicturesDirectoryPath}/${fileName}`;
+      }
+
+      // Download (copy) the image to the destination
+      await RNFS.copyFile(imageUri, destPath);
+      Alert.alert('Success', `Image saved to ${destPath}`);
+    } catch (error) {
+      console.error('Error downloading image:', error);
+      Alert.alert('Error', 'Failed to download image');
+    }
+  };
+
+  const renderItem = ({ item }) => {
+    const isImage = isCompressedImage(item.body);
+    const imageUri = isImage ? decompressImageForDisplay(item.body) : null;
+
+    return (
+      <View
+        style={[
+          styles.messageBubble,
+          item.type === 2 ? styles.sentMessage : styles.receivedMessage,
+        ]}
+      >
+        {isImage ? (
+          <TouchableOpacity onPress={() => setFullImageUri(imageUri)}>
+            <Image
+              source={{ uri: imageUri }}
+              style={styles.imageMessage}
+              resizeMode="contain"
+            />
+          </TouchableOpacity>
+        ) : (
+          <Text style={styles.messageText}>{item.body}</Text>
+        )}
+        <Text style={styles.timestamp}>
+          {new Date(item.timestamp).toLocaleTimeString([], {
+            hour: '2-digit',
+            minute: '2-digit',
+          })}
+        </Text>
+      </View>
+    );
+  };
+
+  return (
+    <>
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 80}
+      >
+        <FlatList
+          data={messages}
+          renderItem={renderItem}
+          keyExtractor={item => item.id}
+          inverted
+          contentContainerStyle={styles.messagesContainer}
+          ListEmptyComponent={
+            loading ? (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="large" color="#128C7E" />
+              </View>
+            ) : (
+              <View style={styles.emptyContainer}>
+                <Text>No messages found</Text>
+              </View>
+            )
+          }
+        />
+
+        <View style={styles.inputContainer}>
+          <TouchableOpacity onPress={handleImagePick} style={styles.iconButton}>
+            <Icon name="plus" size={30} color="#128C7E" />
+          </TouchableOpacity>
+
+          <TextInput
+            style={styles.input}
+            value={newMessage}
+            onChangeText={setNewMessage}
+            placeholder="Type a message"
+            multiline
+            editable={!sending}
+          />
+          <TouchableOpacity
+            style={[
+              styles.sendButton,
+              (sending || !newMessage.trim()) && styles.disabledButton,
+            ]}
+            onPress={sendMessage}
+            disabled={sending || !newMessage.trim()}
+          >
+            <Text style={styles.sendButtonText}>
+              {sending ? 'Sending...' : 'Send'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </KeyboardAvoidingView>
+
+      {/* Fullscreen Image Modal with Download Button */}
+      <Modal visible={!!fullImageUri} transparent={true}>
+        <View style={styles.modalContainer}>
+          <Pressable style={styles.modalBackground} onPress={() => setFullImageUri(null)}>
+            <Image
+              source={{ uri: fullImageUri }}
+              style={styles.fullImage}
+              resizeMode="contain"
+            />
+          </Pressable>
+          <TouchableOpacity
+            style={styles.downloadButton}
+            onPress={() => downloadImage(fullImageUri)}
+          >
+            {/* <Icon name="arrow-down-to-line" size={24} color="#FFFFFF"/> */}
+            <Text style={styles.downloadButtonText}>Download</Text>
+          </TouchableOpacity>
+        </View>
+      </Modal>
+    </>
+  );
+};
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: '#f0f0f0' },
+  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingTop: 50 },
+  emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingTop: 50 },
+  messagesContainer: { paddingTop: 10, paddingBottom: 70 },
+  messageBubble: {
+    maxWidth: '80%',
+    padding: 12,
+    borderRadius: 18,
+    marginVertical: 4,
+    marginHorizontal: 16,
+  },
+  sentMessage: {
+    alignSelf: 'flex-end',
+    backgroundColor: '#DCF8C6',
+    borderTopRightRadius: 4,
+  },
+  receivedMessage: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 4,
+  },
+  messageText: { fontSize: 16 },
+  timestamp: {
+    fontSize: 12,
+    color: '#666666',
+    marginTop: 4,
+    textAlign: 'right',
+  },
+  inputContainer: {
+    flexDirection: 'row',
+    padding: 8,
+    paddingBottom: 35,
+    backgroundColor: '#FFFFFF',
+    borderTopWidth: 1,
+    borderTopColor: '#ECECEC',
+  },
+  input: {
+    flex: 1,
+    minHeight: 40,
+    maxHeight: 120,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: '#F5F5F5',
+    borderRadius: 20,
+    marginRight: 8,
+    fontSize: 16,
+  },
+  sendButton: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: 60,
+    height: 40,
+    backgroundColor: '#128C7E',
+    borderRadius: 20,
+  },
+  disabledButton: { opacity: 0.6 },
+  sendButtonText: { color: 'white', fontWeight: 'bold', fontSize: 16 },
+  iconButton: { justifyContent: 'center', alignItems: 'center', paddingHorizontal: 8 },
+  imageMessage: { width: 200, height: 200, borderRadius: 10, marginBottom: 5 },
+  modalContainer: {
+    flex: 1,
+    backgroundColor: '#000000CC',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalBackground: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  fullImage: {
+    width: '100%',
+    height: '100%',
+  },
+  downloadButton: {
+    position: 'absolute',
+    bottom: 40,
+    right: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#128C7E',
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 25,
+  },
+  downloadButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginLeft: 0,
+  },
+});
+
+export default ThreadView;
+
+
+
+
+
+///doneee
+
+//////all working
+//donwlaod wokr 
+
+//just removed the icon
+
+////dpone done doneondoneo
+
+//useeffect error doneee

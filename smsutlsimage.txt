@@ -1,0 +1,93 @@
+// utils/smsImageUtils.js
+import ImageResizer from '@bam.tech/react-native-image-resizer';
+import { compressToEncodedURIComponent, decompressFromEncodedURIComponent } from 'lz-string';
+
+/**
+ * Maximum allowed image dimensions for SMS compression
+ */
+const MAX_IMAGE_WIDTH = 200;
+const MAX_IMAGE_HEIGHT = 200;
+const IMAGE_QUALITY = 40; // 0-100 (lower = smaller but worse quality)
+const IMAGE_PREFIX = 'IMG:'; // To identify image messages
+
+/**
+ * Compresses an image to an SMS-friendly string
+ * @param {string} imageUri - Local image URI or base64
+ * @returns {Promise<string>} Compressed string (with IMG: prefix)
+ */
+
+export const compressImageForSMS = async (imageUri) => {
+  try {
+    // 1. Resize and compress the image
+    const resized = await ImageResizer.createResizedImage(
+      imageUri,                // imageUri
+      MAX_IMAGE_WIDTH,         // width
+      MAX_IMAGE_HEIGHT,        // height
+      'JPEG',                  // format
+      IMAGE_QUALITY,           // quality
+      0,                       // rotation
+      undefined,               // outputPath (null/undefined returns base64)
+      false                    // keepMeta
+    );
+
+    // Rest of your code remains the same...
+    let base64 = resized.uri;
+    if (base64.startsWith('data:')) {
+      base64 = base64.split(',')[1];
+    }
+
+    if (!base64) {
+      throw new Error('Failed to get image data');
+    }
+
+    const compressed = compressToEncodedURIComponent(base64);
+    return `${IMAGE_PREFIX}${compressed}`;
+  } catch (error) {
+    console.error('Image compression failed:', error);
+    throw new Error(`Failed to compress image: ${error.message}`);
+  }
+};
+
+/**
+ * Checks if a message is a compressed image
+ * @param {string} message 
+ * @returns {boolean}
+ */
+export const isCompressedImage = (message) => {
+  return message?.startsWith(IMAGE_PREFIX);
+};
+
+/**
+ * Decompresses an image string back to a displayable URI
+ * @param {string} compressedStr 
+ * @returns {string | null} - Base64 image URI or null if invalid
+ */
+
+
+export const decompressImageForDisplay = (compressedStr) => {
+  if (!isCompressedImage(compressedStr)) return null;
+
+  try {
+    // 1. Remove prefix
+    const compressedData = compressedStr.replace(IMAGE_PREFIX, '');
+
+    // 2. Decompress LZ-String
+    const base64 = decompressFromEncodedURIComponent(compressedData);
+
+    if (!base64) {
+      console.warn('Failed to decompress image data');
+      return null;
+    }
+
+    // 3. Convert to data URI for <Image> component
+    return `${base64}`;
+  } catch (error) {
+    console.error('Image decompression failed:', error);
+    return null;
+  }
+};
+
+
+/////////shsdfshdf
+
+////////////finla wokring done all wokring 
