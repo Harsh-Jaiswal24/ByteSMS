@@ -54,9 +54,6 @@ A lightweight, fast, and modern SMS messaging app built with **React Native**. B
 
 
 
-## ✍️ Author
- ### Harsh Jaiswal
-
 
 ## 🤝 Contributing
 Pull requests are welcome. For major changes, open an issue first to discuss what you’d like to change.
