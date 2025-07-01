@@ -17,11 +17,6 @@ A lightweight, fast, and modern SMS messaging app built with **React Native**. B
 
 ---
 
-## 📷 Screenshots
-
-> _(Add screenshots here showing chat screen, image picker, and full-screen viewer)_
-
----
 
 ## 🛠️ Installation
 
